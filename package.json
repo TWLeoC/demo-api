@@ -1,0 +1,38 @@
+{
+  "name": "demo-api",
+  "version": "1.0.0",
+  "description": "多租戶餐飲點餐 SaaS 後端範例 — RESTful API、JWT 認證、Supabase (Postgres)、線上刷卡與 LINE Bot 整合展示",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "lint": "eslint src/",
+    "test": "node --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^11.0.0",
+    "@supabase/supabase-js": "2.106.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
+    "express-validator": "^7.2.0",
+    "google-auth-library": "^10.9.1",
+    "helmet": "^7.1.0",
+    "iconv-lite": "^0.7.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "nodemailer": "^8.0.9",
+    "twilio": "^6.0.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

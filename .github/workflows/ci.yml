@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run lint
+
+  # 這個 job 直接 build 出正式會用的那個 Docker image，並對它跑整合測試（不是
+  # 另外測本機跑的 node 進程），驗證「部署上去的 code 真的能正常運作」。
+  #
+  # 跟原始範本最大的不同：這裡完全不用任何 GitHub repo secrets。資料庫改用
+  # Supabase CLI 在 runner 上用 Docker 起一套本機 Postgres + PostgREST（跟
+  # `supabase/migrations/`、`supabase/seed.sql` 是同一套，本機開發也是用這個），
+  # 印出來的 API URL / service_role key 是本機 stack 的固定公開測試值，
+  # 本來就不是要保密的東西，直接拿來用完全沒有洩漏風險。
+  docker-test:
+    runs-on: ubuntu-latest
+    needs: lint
+    env:
+      # 這幾個不是真的密鑰，只是測試套件自己簽章自己驗證用的固定假值，
+      # 必須跟 test/helpers/config.js 裡寫死的值完全一致，才不會出現
+      # 「container 端跟測試腳本端用不同密鑰」導致 JWT 驗證/藍新簽章失敗
+      JWT_SECRET: 'ci-test-only-secret-not-real'
+      NEWEBPAY_MERCHANT_ID: 'CITESTMERCHANT001'
+      NEWEBPAY_HASH_KEY: 'ab12ab12ab12ab12ab12ab12ab12ab12'
+      NEWEBPAY_HASH_IV: 'ab12ab12ab12ab12'
+      # seed.sql 裡寫死的固定 UUID，不是真實商家資料
+      TEST_STORE_ID: '00000000-0000-0000-0000-000000000001'
+      TEST_ADMIN_USER_ID: '00000000-0000-0000-0000-000000000401'
+      TEST_BASE_URL: 'http://localhost:4001'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # supabase start 會自動套用 supabase/migrations/ + supabase/seed.sql，
+      # 起一套完整的本機 Postgres + PostgREST（Kong Gateway 預設監聽 54321）
+      - name: Start local Supabase stack
+        run: supabase start --workdir .
+
+      - name: Export local Supabase credentials
+        run: |
+          supabase status -o env --workdir . | grep -E '^(API_URL|SERVICE_ROLE_KEY)=' >> "$GITHUB_ENV"
+
+      - name: Build production Docker image
+        run: docker build -t demo-api:ci .
+
+      - name: Run container
+        run: |
+          # app 容器要連到 runner host 上的 Supabase stack，host.docker.internal
+          # 需要明確加這個 host mapping（Docker 20.10+ 在 Linux 上才會生效）
+          docker run -d --name demo-api-ci -p 4001:3000 \
+            --add-host=host.docker.internal:host-gateway \
+            -e PORT=3000 \
+            -e NODE_ENV=production \
+            -e SUPABASE_URL="${API_URL/127.0.0.1/host.docker.internal}" \
+            -e SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+            -e JWT_SECRET="$JWT_SECRET" \
+            -e NEWEBPAY_MERCHANT_ID="$NEWEBPAY_MERCHANT_ID" \
+            -e NEWEBPAY_HASH_KEY="$NEWEBPAY_HASH_KEY" \
+            -e NEWEBPAY_HASH_IV="$NEWEBPAY_HASH_IV" \
+            demo-api:ci
+
+      - name: Wait for container to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4001/health > /dev/null; then
+              echo "container is healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "container did not become healthy in time" >&2
+          docker logs demo-api-ci
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Run integration tests against the built image
+        run: npm test
+
+      - name: Container logs
+        if: always()
+        run: docker logs demo-api-ci || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f demo-api-ci || true
+          supabase stop --workdir . || true
