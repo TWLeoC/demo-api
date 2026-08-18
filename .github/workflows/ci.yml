@@ -56,11 +56,18 @@ jobs:
       # 直接把這行原封不動 append 進 GITHUB_ENV 的話，值裡面會夾帶字面上的雙引號字元，
       # 後面組出來的 SUPABASE_URL 就變成不合法的 URL——先 eval 過一次把引號正確解掉，
       # 再用乾淨的 KEY=value（不帶引號）寫回 GITHUB_ENV
+      # 這兩個名字的環境變數要留給後面的「npm test」步驟用——那個步驟是直接在
+      # runner 上跑（不是在 Docker container 裡），test/helpers/db.js 會直接
+      # require src/config/supabase.js 連 DB 做測試資料的建立/清理，讀的是
+      # runner 行程自己的 SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY，跟 container
+      # 內部另外用 host.docker.internal 組出來的那組是兩回事，不能只塞 container
       - name: Export local Supabase credentials
         run: |
           eval "$(supabase status -o env --workdir . | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
           echo "API_URL=$API_URL" >> "$GITHUB_ENV"
           echo "SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
 
       - name: Build production Docker image
         run: docker build -t demo-api:ci .
