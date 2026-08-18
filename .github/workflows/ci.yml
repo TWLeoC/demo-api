@@ -52,9 +52,15 @@ jobs:
       - name: Start local Supabase stack
         run: supabase start --workdir .
 
+      # `supabase status -o env` 印出來的是 shell-quoted 格式（API_URL="http://..."），
+      # 直接把這行原封不動 append 進 GITHUB_ENV 的話，值裡面會夾帶字面上的雙引號字元，
+      # 後面組出來的 SUPABASE_URL 就變成不合法的 URL——先 eval 過一次把引號正確解掉，
+      # 再用乾淨的 KEY=value（不帶引號）寫回 GITHUB_ENV
       - name: Export local Supabase credentials
         run: |
-          supabase status -o env --workdir . | grep -E '^(API_URL|SERVICE_ROLE_KEY)=' >> "$GITHUB_ENV"
+          eval "$(supabase status -o env --workdir . | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')"
+          echo "API_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
 
       - name: Build production Docker image
         run: docker build -t demo-api:ci .
