@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase')
+const { logRequest } = require('../utils/requestLog')
 
 let blacklistSet = new Set()
 let loadedAt = 0
@@ -31,7 +32,14 @@ const ipBlacklist = (req, res, next) => {
   if (SKIP_PREFIXES.some(p => req.path.startsWith(p))) return next()
   const ip = req.ip
   if (ip && blacklistSet.has(ip)) {
-    return res.status(403).json({ error: 'Forbidden' })
+    const start = Date.now()
+    res.status(403).json({ error: 'Forbidden' })
+    // 命中黑名單就直接回應、不呼叫 next()，apiLogger 永遠跑不到這裡——之前
+    // 完全沒補寫，導致持續被擋的攻擊 IP 在 dashboard／稽核上完全看不到任何
+    // 紀錄，商家只看得到「安靜」，不知道系統其實一直在擋（2026-09 資安檢查
+    // 發現的落差，比照 honeypotPaths.js 已經在做的補寫方式）
+    logRequest(req, res, { start, isScan: true })
+    return
   }
   next()
 }

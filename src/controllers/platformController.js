@@ -86,7 +86,7 @@ const getRecent = async (req, res, next) => {
 
     let query = supabase
       .from('api_log')
-      .select('id, store_id, method, path, status, latency_ms, ip, created_at')
+      .select('id, store_id, method, path, full_path, status, latency_ms, ip, user_agent, referer, bytes, is_scan, created_at')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -96,6 +96,30 @@ const getRecent = async (req, res, next) => {
     if (dbError) throw dbError
 
     return success(res, data)
+  } catch (err) {
+    next(err)
+  }
+}
+
+// GET /api/platform/alerts?limit=50&severity=high
+// 掃描告警落地紀錄（honeypot 即時事件 + alertService 窗口聚合告警都寫在
+// security_alert），LINE 推播漏看時來這裡查
+const getAlerts = async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+
+    let query = supabase
+      .from('security_alert')
+      .select('id, type, severity, ip, message, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (req.query.severity) query = query.eq('severity', req.query.severity)
+
+    const { data, error: dbError } = await query
+    if (dbError) throw dbError
+
+    return success(res, data || [])
   } catch (err) {
     next(err)
   }
@@ -417,6 +441,11 @@ const updateConfig = async (req, res, next) => {
     const allowed = [
       'alert_line_target', 'alert_error_rate_threshold', 'alert_cooldown_minutes',
       'alert_request_rate_threshold', 'alert_ip_rate_threshold', 'alert_latency_threshold',
+      'alert_ip_4xx_threshold', 'alert_path_divergence_threshold',
+      // 逗號分隔：已知正常自動化來源（uptime monitor、健康檢查…），從告警的
+      // 聚合統計中排除，避免正常規律流量誤觸告警（不影響 ipBlacklist／
+      // honeypotPaths 的封鎖判斷，白名單只管「要不要通知」，不管「要不要擋」）
+      'alert_ip_whitelist', 'alert_ua_whitelist',
     ]
     const entries = Object.entries(req.body).filter(([k]) => allowed.includes(k))
     if (entries.length === 0) return error(res, '沒有可更新的欄位', 400)
@@ -632,7 +661,7 @@ const updatePlanFeaturesConfig = async (req, res, next) => {
 }
 
 module.exports = {
-  getSummary, getTimeline, getRecent, getStores, getStore, createStore, updateStore, getOrders,
+  getSummary, getTimeline, getRecent, getAlerts, getStores, getStore, createStore, updateStore, getOrders,
   getConfig, updateConfig, testAlert,
   getBlacklist, addBlacklist, updateBlacklist, deleteBlacklist,
   getWatchNotes, addWatchNote, deleteWatchNote,

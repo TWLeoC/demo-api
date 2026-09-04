@@ -2,7 +2,7 @@ const router = require('express').Router()
 const rateLimit = require('express-rate-limit')
 const { ipKeyGenerator } = require('express-rate-limit')
 const {
-  getSummary, getTimeline, getRecent, getStores, getStore, createStore, updateStore, getOrders,
+  getSummary, getTimeline, getRecent, getAlerts, getStores, getStore, createStore, updateStore, getOrders,
   getConfig, updateConfig, testAlert,
   getBlacklist, addBlacklist, updateBlacklist, deleteBlacklist,
   getWatchNotes, addWatchNote, deleteWatchNote,
@@ -62,6 +62,7 @@ router.delete('/watch-notes/:id', deleteWatchNote)
 router.get('/logs/summary', getSummary)
 router.get('/logs/timeline', getTimeline)
 router.get('/logs/recent', getRecent)
+router.get('/alerts', getAlerts)
 router.get('/audit-logs', getAuditLogs)
 router.get('/plan-features', getPlanFeaturesConfig)
 router.patch('/plan-features', updatePlanFeaturesConfig)
