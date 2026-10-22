@@ -94,7 +94,7 @@ app.use(errorHandler)
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log(`🚀 demo-api running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`)
+  console.log(`🚀 demo-api running on port ${PORT} [${process.env.NODE_ENV || 'development'}] node ${process.version}`)
   startAlertMonitor()
   startOrderExpiryMonitor()
 })
